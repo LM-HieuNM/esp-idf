@@ -30,6 +30,50 @@ static uint8_t ble_uuid_base[BLE_UUID128_VAL_LENGTH];
 static int num_chr_dsc;
 static uint16_t s_cached_conn_handle;
 
+
+/******************** LUMI_PROJECT - PhuongNP*****************************
+Rolling door works BLE and MQTT at the same time
+*************************************************************************/
+#define LUMI_BLE_CONTROL_ENABLE         (1)
+#if(LUMI_BLE_CONTROL_ENABLE)
+int LumiReadCallback(uint16_t con_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg);
+int LumiWriteCallback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg);
+
+static uint16_t char_handle_read;
+ble_uuid128_t UUID128_LumiService = {
+    { BLE_UUID_TYPE_128 }, { 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78 }
+};
+/*Characteristic for recevicer all message from BLE*/
+ble_uuid128_t UUID128_LumiCharacterReceive = {
+    { BLE_UUID_TYPE_128 }, { 0x11, 0x9D, 0x9F, 0x42, 0x9C, 0x4F, 0x9F, 0x95, 0x59, 0x45, 0x3D, 0x26, 0xF5, 0x2E, 0xEE, 0x18 }
+};
+
+/*Characteristic for transmiter from device to Phone*/
+ble_uuid128_t UUID128_LumiCharacterTransmit   = {
+    { BLE_UUID_TYPE_128 }, { 0x12, 0x9D, 0x9F, 0x42, 0x9C, 0x4F, 0x9F, 0x95, 0x59, 0x45, 0x3D, 0x26, 0xF5, 0x2E, 0xEE, 0x18 }
+};
+
+static const struct ble_gatt_svc_def gatt_lumi_ble_svcs[] = {
+    {.type =  BLE_GATT_SVC_TYPE_PRIMARY,
+     .uuid = (ble_uuid_t *) &UUID128_LumiService,                 // Define UUID for device type
+     .characteristics = (struct ble_gatt_chr_def[]){
+        {
+            .uuid = (ble_uuid_t *) &UUID128_LumiCharacterTransmit,           // Define UUID for reading
+            .access_cb = LumiReadCallback,
+            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
+            .val_handle = &char_handle_read
+        },
+        {
+            .uuid = (ble_uuid_t *) &UUID128_LumiCharacterReceive,           // Define UUID for writing
+            .access_cb = LumiWriteCallback,
+            .flags = BLE_GATT_CHR_F_WRITE
+        },
+        {0}}},
+    {0}
+};
+#endif  /*LUMI_BLE_CONTROL_ENABLE*/
+/*********************************END LUMI_PROJECT*******************************/
+
 /*  Standard 16 bit UUID for characteristic User Description*/
 #define BLE_GATT_UUID_CHAR_DSC              0x2901
 
@@ -56,6 +100,55 @@ static struct data_mbuf *find_attr_with_handle(uint16_t attr_handle)
     }
     return NULL;
 }
+
+
+/******************** LUMI_PROJECT - PhuongNP*****************************
+Rolling door works BLE and MQTT at the same time
+*************************************************************************/
+#if(LUMI_BLE_CONTROL_ENABLE)
+/**
+ * @func: Read data from ESP32 defined as server
+ * @brief  None
+ * @param  None
+ * @retval None
+ */
+int LumiReadCallback(uint16_t con_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    ESP_LOGI(TAG, "LumiReadCallback");
+    // ble_message_t msg;
+    // BaseType_t eventTransmit = xQueueReceive(BleTxQueue, &msg, pdMS_TO_TICKS(20));    //Pop event from queue(20ms / time)
+    // if(eventTransmit == pdTRUE){
+    //     printf("read:%s",msg.data);
+    //     os_mbuf_append(ctxt->om,msg.data, msg.len);
+    //     free(msg.data);
+    // }else{
+        os_mbuf_append(ctxt->om, "Data not found!", strlen("Data not found!"));
+    // }
+    return 0;
+}
+/**
+ * @func: Write data to ESP32 defined as server
+ * @brief  None
+ * @param  None
+ * @retval None
+ */
+int LumiWriteCallback(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    ESP_LOGI(TAG, "LumiWriteCallback");
+    // ble_message_t msg;
+    // msg.len = ctxt->om->om_len;
+    // msg.data = (char*)malloc(sizeof(char) * (ctxt->om->om_len + 1));
+    // if(msg.data == NULL ){
+    //     free(msg.data);
+    //     ESP_LOGE(TAG, "Allocate mqtt memory error!");
+    //     return 1;
+    // }
+    // strncpy(msg.data, (char*)ctxt->om->om_data, ctxt->om->om_len);
+    // BLE::GetInstance().PushBleEventToRxQueue(msg);
+    return 0;
+}
+#endif /*LUMI_BLE_CONTROL_ENABLE*/
+
 /**************************************************************
 *         Initialize GAP, protocomm parameters                *
 **************************************************************/
@@ -458,10 +551,32 @@ gatt_svr_init(const simple_ble_cfg_t *config)
         return rc;
     }
 
+    /******************** LUMI_PROJECT - PhuongNP*****************************
+    Rolling door works BLE and MQTT at the same time
+    *************************************************************************/
+    #if(LUMI_BLE_CONTROL_ENABLE)
+    rc = ble_gatts_count_cfg(gatt_lumi_ble_svcs);            // 4 - Initialize NimBLE configuration - config gatt services
+    if (rc != 0) {
+        return rc;
+    }
+    #endif  /*LUMI_BLE_CONTROL_ENABLE*/
+    /*****************END LUMI_PROJECT***********************/
+
     rc = ble_gatts_add_svcs(config->gatt_db);
     if (rc != 0) {
         return rc;
     }
+
+    /******************** LUMI_PROJECT - PhuongNP*****************************
+    Rolling door works BLE and MQTT at the same time
+    *************************************************************************/
+    #if(LUMI_BLE_CONTROL_ENABLE)
+    rc = ble_gatts_add_svcs(gatt_lumi_ble_svcs);
+    if (rc != 0) {
+        return rc;
+    }
+    #endif  /*LUMI_BLE_CONTROL_ENABLE*/
+    /*****************END LUMI_PROJECT***********************/
 
     return 0;
 }
